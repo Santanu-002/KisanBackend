@@ -1,0 +1,15 @@
+fastapi[all]
+uvicorn
+sqlalchemy[asyncio]
+sqlmodel
+alembic
+asyncpg
+pydantic-settings
+python-jose[cryptography]
+passlib[bcrypt]
+redis
+httpx
+python-json-logger
+uuid
+python-multipart
+twilio
