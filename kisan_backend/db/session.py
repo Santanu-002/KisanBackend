@@ -17,18 +17,12 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 async def get_db():
+    """Dependency for obtaining an async database session."""
     async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+        yield session
 
 async def init_db():
+    """Bootstrap the database by creating tables if they don't exist."""
     async with engine.begin() as conn:
-        # Import models here to ensure they're registered with SQLModel.metadata
-        from kisan_backend.models.user import User
+        from kisan_backend.models.user import User  # noqa
         await conn.run_sync(SQLModel.metadata.create_all)

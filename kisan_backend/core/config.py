@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     
     # OTP Configuration
-    OTP_EXPIRY_SECONDS: int = 300  # 5 minutes
+    OTP_EXPIRY_SECONDS: int = 600  # 10 minutes
     OTP_MAX_ATTEMPTS: int = 5
     OTP_RATE_LIMIT_REQUESTS: int = 3
     OTP_RATE_LIMIT_WINDOW_SECONDS: int = 600  # 10 minutes
@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: Optional[str] = None
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_PHONE_NUMBER: Optional[str] = None
+    TWILIO_WHATSAPP_NUMBER: Optional[str] = None
+    TWILIO_MESSAGING_SERVICE_SID: Optional[str] = None
+    ANDROID_APP_HASH: Optional[str] = None
     
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
