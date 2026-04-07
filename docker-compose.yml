@@ -44,11 +44,9 @@ services:
     volumes:
       - .:/app  # Mount local source so edits are picked up without rebuild
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/kisan_db
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - SECRET_KEY=kisan-backend-secret-key-987654321
-    # Use the .env file as a fallback for any other config settings
+      # These overrides are now managed via the .env file for a single source of truth
+      - APP_ENV=docker
+    # Use the .env file as a primary config source
     env_file:
       - .env
 
