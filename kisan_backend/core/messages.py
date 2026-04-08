@@ -13,6 +13,11 @@ class ResponseMessages:
     USER_NOT_FOUND = "User account not found."
     INVALID_REFRESH_TOKEN = "Invalid or expired refresh token. Please login again."
     
+    # User/Profile Success
+    PROFILE_FETCHED = "Profile fetched successfully."
+    PROFILE_UPDATED = "Profile updated successfully."
+    UPLOAD_URL_GENERATED = "Upload URL generated successfully."
+
     # General Errors
     VALIDATION_ERROR = "One or more fields are invalid."
     INTERNAL_SERVER_ERROR = "An unexpected error occurred on our end."

@@ -7,8 +7,9 @@ from fastapi.exceptions import RequestValidationError
 
 from kisan_backend.core.config import settings
 from kisan_backend.core.exceptions import AppBaseException
-from kisan_backend.api.v1.endpoints import auth
+from kisan_backend.api.v1.endpoints import auth, user
 from kisan_backend.middleware.logging import LoggingMiddleware
+from kisan_backend.middleware.device_metadata import DeviceMetadataMiddleware
 from kisan_backend.db.session import init_db
 from kisan_backend.core.responses import ErrorResponse, SuccessResponse
 
@@ -45,10 +46,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(LoggingMiddleware)
+app.add_middleware(DeviceMetadataMiddleware)
 
 # --- Routes ---
 
 app.include_router(auth.router, prefix=settings.API_V1_STR)
+app.include_router(user.router, prefix=settings.API_V1_STR)
 
 from kisan_backend.core.messages import ResponseMessages
 

@@ -30,3 +30,13 @@ class TokenResponse(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+
+class DeviceMetadata(BaseModel):
+    device_id: str
+    brand: str = "unknown"
+    model: str = "unknown"
+    os_name: str = "unknown"
+    os_version: str = "unknown"
+    app_version: str = "unknown"
+    ip_address: str | None = None

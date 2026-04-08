@@ -11,4 +11,6 @@ httpx
 loguru
 python-multipart
 twilio
-
+aioboto3
+email-validator
+psycopg2-binary

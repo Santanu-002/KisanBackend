@@ -19,10 +19,38 @@ AsyncSessionLocal = async_sessionmaker(
 async def get_db():
     """Dependency for obtaining an async database session."""
     async with AsyncSessionLocal() as session:
-        yield session
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+import os
+import sys
+import subprocess
+from loguru import logger
 
 async def init_db():
-    """Bootstrap the database by creating tables if they don't exist."""
-    async with engine.begin() as conn:
-        from kisan_backend.models.user import User  # noqa
-        await conn.run_sync(SQLModel.metadata.create_all)
+    """Bootstrap the database by running Alembic migrations."""
+    try:
+        # We run the migration via subprocess to ensure it uses the project's
+        # alembic configuration and environment properly.
+        # This is the "Migration-First" approach mandated by RULEBOOK.md
+        logger.info("Applying database migrations...")
+        
+        # Use sys.executable to ensure we use the same Python environment
+        result = subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        logger.info(f"Migrations applied successfully:\n{result.stdout}")
+        
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to apply migrations: {e.stderr}")
+        # In development, we might want to continue, but in Prod this should probably halt.
+        # For now, we'll log it and let the app try to start.
+    except Exception as e:
+        logger.error(f"Unexpected error during migration: {e}")

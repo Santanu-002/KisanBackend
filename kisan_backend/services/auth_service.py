@@ -12,15 +12,23 @@ from kisan_backend.core.config import settings
 from kisan_backend.core.messages import ResponseMessages
 from kisan_backend.core.exceptions import AuthException
 from kisan_backend.repositories.user_repository import UserRepository
+from kisan_backend.repositories.user_session_repository import UserSessionRepository
 from kisan_backend.services.sms_service import SMSProvider
-from kisan_backend.schemas.auth import ChannelType, SendOTPResponse
+from kisan_backend.schemas.auth import ChannelType, SendOTPResponse, DeviceMetadata
 from kisan_backend.models.user import User, UserRole
 
 class AuthService:
     """Service for handling user authentication, OTP generation, and token management."""
 
-    def __init__(self, user_repo: UserRepository, redis: Redis, sms: SMSProvider):
+    def __init__(
+        self, 
+        user_repo: UserRepository, 
+        user_session_repo: UserSessionRepository,
+        redis: Redis, 
+        sms: SMSProvider
+    ):
         self.user_repo = user_repo
+        self.user_session_repo = user_session_repo
         self.redis = redis
         self.sms = sms
 
@@ -86,8 +94,11 @@ class AuthService:
             message = f"{message} {settings.ANDROID_APP_HASH}"
 
         try:
-            # Skip actual SMS delivery for the mock test account
-            if phone_number not in {"+911111111111", "+91 1111111111"}:
+            # For master test accounts, use the mock provider to log to terminal instead of Twilio
+            if phone_number in {"+911111111111", "+91 1111111111", "+9111111111111"}:
+                from kisan_backend.services.sms_service import MockSMSProvider
+                await MockSMSProvider().send_sms(phone_number, message, channel=channel)
+            else:
                 sent = await self.sms.send_sms(phone_number, message, channel=channel)
                 if not sent:
                     raise AuthException(ResponseMessages.INTERNAL_SERVER_ERROR)
@@ -111,7 +122,7 @@ class AuthService:
         """
         otp_key = f"otp:{phone_number}"
 
-        if phone_number in {"+911111111111", "+91 1111111111"}:
+        if phone_number in {"+911111111111", "+91 1111111111", "+9111111111111"}:
             if otp != "222222":
                 raise AuthException(ResponseMessages.INVALID_OTP)
         else:
@@ -128,27 +139,46 @@ class AuthService:
 
         # Get or Create User
         user = await self.user_repo.get_by_phone(phone_number)
-        is_new = False
+        is_new = not user or user.profile is None
+
         if not user:
             user = await self.user_repo.create({
                 "phone_number": phone_number,
                 "role": UserRole.FARMER,
                 "is_active": True
             })
-            is_new = True
-        else:
-            await self.user_repo.update_last_login(user)
 
         return user, is_new
 
-    async def create_tokens(self, user_id: str, session_id: Optional[str] = None) -> dict:
+    async def create_tokens(
+        self, 
+        user_id: str, 
+        device_meta: DeviceMetadata,
+        session_id: Optional[str] = None
+    ) -> dict:
         """
         Create a pair of access and refresh tokens for a user ID.
         If session_id is not provided, a new one is generated.
-        The session is stored in Redis to allow for invalidation.
+        The session is stored in Redis AND Postgres audit table.
         """
+        # 1. Device Override Logic: If this is a new login (no session_id provided), 
+        # deactivate any existing active sessions for this device to prevent conflicts.
+        user_uuid = uuid.UUID(user_id)
         if not session_id:
+            # Generate new session ID
             session_id = str(uuid.uuid4())
+            
+            # Identify and Kill obsolete sessions for this device
+            deactivated_ids = await self.user_session_repo.deactivate_device_sessions(
+                user_id=user_uuid, 
+                device_id=device_meta.device_id
+            )
+            
+            # Purge from Redis cache
+            for old_sid in deactivated_ids:
+                old_key = f"session:{user_id}:{old_sid}"
+                await self.redis.delete(old_key)
+                print(f"[AUTH] Overrode old session {old_sid} for device {device_meta.device_id}")
 
         now_utc = datetime.now(timezone.utc)
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -157,7 +187,15 @@ class AuthService:
         access_expire_at = now_utc + access_token_expires
         refresh_expire_at = now_utc + refresh_token_expires
 
-        # Store session in Redis
+        # 2. Update/Create SQL Audit Record
+        session_uuid = uuid.UUID(session_id)
+        await self.user_session_repo.upsert_session(
+            user_id=user_uuid,
+            session_id=session_uuid,
+            device_meta=device_meta
+        )
+
+        # 2. Store session in Redis for high-speed invalidation/refresh
         session_key = f"session:{user_id}:{session_id}"
         await self.redis.set(
             session_key,
@@ -196,24 +234,35 @@ class AuthService:
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             if payload.get("type") != "refresh":
+                print(f"[DEBUG] Refresh failed: wrong token type")
                 raise AuthException(ResponseMessages.INVALID_REFRESH_TOKEN)
 
             user_id = payload.get("sub")
             session_id = payload.get("sid")
 
             if not user_id or not session_id:
+                print(f"[DEBUG] Refresh failed: missing sub or sid")
                 raise AuthException(ResponseMessages.INVALID_REFRESH_TOKEN)
 
             # Check session in Redis
             session_key = f"session:{user_id}:{session_id}"
             if not await self.redis.get(session_key):
+                print(f"[DEBUG] Refresh failed: session not found in Redis for user {user_id}")
                 raise AuthException(ResponseMessages.INVALID_REFRESH_TOKEN)
 
             return user_id, session_id
-        except JWTError:
+        except JWTError as e:
+            print(f"[DEBUG] Refresh failed: JWT Error - {str(e)}")
             raise AuthException(ResponseMessages.INVALID_REFRESH_TOKEN)
 
     async def invalidate_session(self, user_id: str, session_id: str):
-        """Delete a session from Redis to invalidate all associated tokens."""
+        """Invalidate a session from Redis and mark it as inactive in Postgres."""
         session_key = f"session:{user_id}:{session_id}"
         await self.redis.delete(session_key)
+        
+        # Deactivate in SQL
+        try:
+            session_uuid = uuid.UUID(session_id)
+            await self.user_session_repo.deactivate_session(session_uuid)
+        except Exception as e:
+            print(f"[WARNING] Failed to deactivate session in SQL: {e}")

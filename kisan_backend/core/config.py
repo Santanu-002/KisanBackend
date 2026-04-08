@@ -29,8 +29,7 @@ class Settings(BaseSettings):
     OTP_RATE_LIMIT_WINDOW_SECONDS: int = 600
     
     # SMS Providers
-    SMS_PROVIDER: str = "mock"  # Options: mock, fast2sms, twilio, msg91
-    FAST2SMS_API_KEY: Optional[str] = None
+    SMS_PROVIDER: str = "mock"  # Options: mock, twilio, msg91
     
     # Twilio (Required if SMS_PROVIDER=twilio)
     TWILIO_ACCOUNT_SID: Optional[str] = None
@@ -41,6 +40,14 @@ class Settings(BaseSettings):
     
     # Client Config
     ANDROID_APP_HASH: Optional[str] = None
+    
+    # S3 / Cloudflare R2 Settings
+    S3_ENDPOINT_URL: Optional[str] = None
+    S3_ACCESS_KEY_ID: Optional[str] = None
+    S3_SECRET_ACCESS_KEY: Optional[str] = None
+    S3_BUCKET_NAME: str = "kisan-app"
+    S3_REGION: str = "auto"
+    S3_PUBLIC_URL_PREFIX: Optional[str] = None
     
     model_config = SettingsConfigDict(
         env_file=".env", 
