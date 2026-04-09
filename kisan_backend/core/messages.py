@@ -17,6 +17,7 @@ class ResponseMessages:
     PROFILE_FETCHED = "Profile fetched successfully."
     PROFILE_UPDATED = "Profile updated successfully."
     UPLOAD_URL_GENERATED = "Upload URL generated successfully."
+    KYC_SUBMITTED = "KYC documents submitted successfully."
 
     # General Errors
     VALIDATION_ERROR = "One or more fields are invalid."

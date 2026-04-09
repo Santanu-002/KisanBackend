@@ -24,6 +24,8 @@ class UserResponse(BaseModel):
     role: str
     language: str
     is_active: bool
+    is_kyc_completed: bool
+    is_verified: bool
     created_at: datetime
     updated_at: datetime
     
@@ -46,6 +48,8 @@ class UserResponse(BaseModel):
             role=user.role,
             language=user.language,
             is_active=user.is_active,
+            is_kyc_completed=user.is_kyc_completed,
+            is_verified=user.is_verified,
             created_at=user.created_at,
             updated_at=user.updated_at,
             full_name=profile.full_name if profile else None,

@@ -67,6 +67,42 @@ class UserService:
             )
             return url, file_key
 
+    async def get_kyc_upload_url(self, user_id: str, filename: str, content_type: str = "image/jpeg") -> Tuple[str, str]:
+        """Generates a presigned URL for uploading a KYC document to R2."""
+        # Clean the filename to ensure it's safe and consistent
+        ext = os.path.splitext(filename)[1] or ".jpg"
+        file_key = f"profile/kyc/{user_id}/{uuid.uuid4()}{ext}"
+        
+        async with self.session.client(
+            's3',
+            endpoint_url=settings.S3_ENDPOINT_URL,
+            aws_access_key_id=settings.S3_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.S3_SECRET_ACCESS_KEY,
+            config=Config(signature_version='s3v4'),
+            region_name=settings.S3_REGION
+        ) as s3:
+            url = await s3.generate_presigned_url(
+                ClientMethod='put_object',
+                Params={
+                    'Bucket': settings.S3_BUCKET_NAME,
+                    'Key': file_key,
+                    'ContentType': content_type,
+                },
+                ExpiresIn=3600
+            )
+            return url, file_key
+
+    async def submit_kyc(self, user_id: str) -> User:
+        """Marks the user's KYC as completed."""
+        user = await self.user_repo.get_by_id(user_id)
+        if not user:
+            raise Exception("User not found")
+        
+        user.is_kyc_completed = True
+        user.updated_at = datetime.utcnow()
+        await self.user_repo.session.flush()
+        return user
+
     async def get_predefined_avatars(self) -> List[str]:
         """Lists available avatars from the predefined path in R2."""
         prefix = "profile/avatars/"

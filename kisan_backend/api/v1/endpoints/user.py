@@ -50,11 +50,38 @@ async def get_avatar_upload_url(
 ):
     url, file_key = await user_service.get_avatar_upload_url(str(current_user.id), content_type)
     return SuccessResponse(
-        message="Upload URL generated successfully",
+        message=ResponseMessages.UPLOAD_URL_GENERATED,
         data={
             "upload_url": url,
             "file_key": file_key
         }
+    )
+
+@router.get("/kyc-upload-url", response_model=ApiResponse[AvatarUploadUrlResponse])
+async def get_kyc_upload_url(
+    current_user: CurrentUserDep,
+    user_service: UserServiceDep,
+    filename: str,
+    content_type: str = "image/jpeg"
+):
+    url, file_key = await user_service.get_kyc_upload_url(str(current_user.id), filename, content_type)
+    return SuccessResponse(
+        message=ResponseMessages.UPLOAD_URL_GENERATED,
+        data={
+            "upload_url": url,
+            "file_key": file_key
+        }
+    )
+
+@router.post("/submit-kyc", response_model=ApiResponse[UserResponse])
+async def submit_kyc(
+    current_user: CurrentUserDep,
+    user_service: UserServiceDep,
+):
+    user = await user_service.submit_kyc(str(current_user.id))
+    return SuccessResponse(
+        message=ResponseMessages.KYC_SUBMITTED,
+        data=UserResponse.from_user(user)
     )
 
 @router.get("/predefined-avatars", response_model=ApiResponse[PredefinedAvatarResponse])

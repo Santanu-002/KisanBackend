@@ -19,6 +19,8 @@ class User(SQLModel, table=True):
     role: UserRole = Field(default=UserRole.FARMER)
     language: str = Field(default="en")
     is_active: bool = Field(default=True)
+    is_kyc_completed: bool = Field(default=False)
+    is_verified: bool = Field(default=False)
     
     # Relationship to Profile
     profile: Optional["Profile"] = Relationship(back_populates="user", sa_relationship_kwargs={"uselist": False})

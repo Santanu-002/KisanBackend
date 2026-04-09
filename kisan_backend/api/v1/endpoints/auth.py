@@ -80,6 +80,8 @@ async def verify_otp(
         data={
             "user_id": user.id,
             "is_new_user": is_new,
+            "is_kyc_completed": user.is_kyc_completed,
+            "is_verified": user.is_verified,
             **tokens
         }
     )
