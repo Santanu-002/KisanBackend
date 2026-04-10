@@ -16,6 +16,7 @@ from kisan_backend.core.config import settings
 from kisan_backend.models.user import User
 from kisan_backend.models.profile import Profile
 from kisan_backend.models.user_session import UserSession
+from kisan_backend.models.kyc import KYCDetails
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
