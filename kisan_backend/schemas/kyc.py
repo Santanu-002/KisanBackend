@@ -18,6 +18,8 @@ class KYCBase(BaseModel):
 class KYCSubmissionResponse(KYCBase):
     id: UUID
     user_id: UUID
+    full_name: Optional[str] = None
+    phone_number: Optional[str] = None
     front_image_url: str
     back_image_url: str
     status: KYCStatus

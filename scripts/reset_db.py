@@ -15,20 +15,37 @@ async def reset_db():
     engine = create_async_engine(settings.DATABASE_URL, echo=True)
 
     async with engine.begin() as conn:
-        print("Fetching all tables in public schema...")
-        result = await conn.execute(sa_text("""
-            SELECT tablename 
-            FROM pg_tables 
-            WHERE schemaname = 'public' AND tablename != 'alembic_version';
-        """))
-        tables = result.scalars().all()
-        
-        if tables:
-            tables_str = ", ".join(f'"{table}"' for table in tables)
-            print(f"Truncating tables with CASCADE: {tables_str}")
-            await conn.execute(sa_text(f"TRUNCATE TABLE {tables_str} CASCADE;"))
+        print("Truncating child tables with CASCADE...")
+        await conn.execute(sa_text("TRUNCATE TABLE user_sessions, profiles, kyc_details CASCADE;"))
+
+        print("Removing standard users...")
+        await conn.execute(sa_text("DELETE FROM users WHERE role != 'admin';"))
+
+        print("Checking for existing admin user...")
+        result = await conn.execute(sa_text("SELECT id FROM users WHERE phone_number = '+912222222222' LIMIT 1;"))
+        admin_exists = result.scalar()
+
+        if not admin_exists:
+            import uuid
+            from datetime import datetime
+            print("Seeding admin user...")
+            admin_id = uuid.uuid4()
+            now = datetime.utcnow()
+            await conn.execute(sa_text("""
+                INSERT INTO users (id, phone_number, role, is_active, is_kyc_completed, is_verified, created_at, updated_at, language)
+                VALUES (:id, :phone, :role, :is_active, :is_kyc, :is_verified, :now, :now, 'en')
+            """), {
+                "id": admin_id,
+                "phone": "+912222222222",
+                "role": "admin",
+                "is_active": True,
+                "is_kyc": True,
+                "is_verified": True,
+                "now": now
+            })
+            print("Admin user seeded with phone +912222222222")
         else:
-            print("No tables found in public schema to truncate.")
+            print("Admin user already exists. Preserving...")
 
     await engine.dispose()
     print("Database reset complete!")

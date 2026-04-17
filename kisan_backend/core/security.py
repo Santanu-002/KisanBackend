@@ -9,7 +9,7 @@ from kisan_backend.core.config import settings
 from kisan_backend.db.session import get_db
 from kisan_backend.db.redis import get_redis
 from kisan_backend.repositories.user_repository import UserRepository
-from kisan_backend.models.user import User
+from kisan_backend.models.user import User, UserRole
 
 reusable_oauth2 = HTTPBearer()
 
@@ -34,7 +34,7 @@ async def get_current_user(
             
         # Check session in Redis
         session_key = f"session:{user_id}:{session_id}"
-        if not await redis.get(session_key):
+        if not await redis.exists(session_key):
              raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Session expired or invalidated",
@@ -49,7 +49,18 @@ async def get_current_user(
     user_repo = UserRepository(db)
     user = await user_repo.get_by_id(user_id)
     if not user:
-        print(f"[DEBUG] Security Error: User {user_id} not found in database (search type: {type(user_id)})")
         raise HTTPException(status_code=404, detail="User not found")
     
     return user
+
+
+async def get_current_admin(
+    current_user: Annotated[User, Depends(get_current_user)]
+) -> User:
+    """Ensures the current user has the 'ADMIN' role."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User does not have administrative privileges"
+        )
+    return current_user

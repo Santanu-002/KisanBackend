@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 
 from kisan_backend.core.config import settings
 from kisan_backend.core.exceptions import AppBaseException
-from kisan_backend.api.v1.endpoints import auth, user, location, kyc
+from kisan_backend.api.v1.endpoints import auth, user, location, kyc, admin
 from kisan_backend.middleware.logging import LoggingMiddleware
 from kisan_backend.middleware.device_metadata import DeviceMetadataMiddleware
 from kisan_backend.db.session import init_db
@@ -38,15 +38,21 @@ app = FastAPI(
 
 # --- Middleware ---
 
+app.add_middleware(DeviceMetadataMiddleware)
+app.add_middleware(LoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(LoggingMiddleware)
-app.add_middleware(DeviceMetadataMiddleware)
 
 # --- Routes ---
 
@@ -54,6 +60,7 @@ app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(user.router, prefix=settings.API_V1_STR)
 app.include_router(location.router, prefix=settings.API_V1_STR)
 app.include_router(kyc.router, prefix=settings.API_V1_STR)
+app.include_router(admin.router, prefix=settings.API_V1_STR)
 
 from kisan_backend.core.messages import ResponseMessages
 
@@ -61,8 +68,6 @@ from kisan_backend.core.messages import ResponseMessages
 
 @app.exception_handler(AppBaseException)
 async def app_exception_handler(request: Request, exc: AppBaseException):
-    # Debug print for app exceptions
-    print(f"[DEBUG] AppBaseException: status={exc.status_code}, message={exc.message}")
     return ErrorResponse(
         status_code=exc.status_code,
         message=exc.message
@@ -70,8 +75,6 @@ async def app_exception_handler(request: Request, exc: AppBaseException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    # Debug print for validation errors
-    print(f"[DEBUG] Validation Error: {exc.errors()}")
     return ErrorResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         message=ResponseMessages.VALIDATION_ERROR
@@ -79,10 +82,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def universal_exception_handler(request: Request, exc: Exception):
-    import traceback
-    # Error logging for unhandled exceptions
-    print(f"[ERROR] Unhandled exception: {exc}")
-    traceback.print_exc()
+    # Log the internal error details to the server logs (standard logging preferred in real prod)
     return ErrorResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         message=ResponseMessages.INTERNAL_SERVER_ERROR

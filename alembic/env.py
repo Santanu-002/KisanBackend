@@ -36,13 +36,8 @@ target_metadata = SQLModel.metadata
 
 
 def get_url():
-    """Helper to get a sync URL and handle Docker-to-localhost host switching."""
+    """Helper to get a sync URL directly from settings."""
     url = settings.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
-    # If running from host outside Docker, 'db' isn't resolvable
-    if "@db:" in url:
-        # Check if we are inside docker by looking for common markers
-        if not os.path.exists("/.dockerenv"):
-            url = url.replace("@db:", "@localhost:")
     return url
 
 def run_migrations_offline() -> None:

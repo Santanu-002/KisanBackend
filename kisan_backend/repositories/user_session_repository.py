@@ -92,12 +92,39 @@ class UserSessionRepository:
             
         return deactivated_ids
 
+    async def deactivate_all_user_sessions(self, user_id: uuid.UUID) -> list[str]:
+        """
+        Deactivate every active session for a specific user across all devices.
+        Returns the list of session IDs that were deactivated.
+        """
+        result = await self.session.execute(
+            select(UserSession).where(
+                UserSession.user_id == user_id,
+                UserSession.is_active == True
+            )
+        )
+        active_sessions = list(result.scalars().all())
+        deactivated_ids = []
+        
+        now = datetime.now()
+        for session in active_sessions:
+            session.is_active = False
+            session.logout_at = now
+            session.updated_at = now
+            self.session.add(session)
+            deactivated_ids.append(str(session.id))
+            
+        if deactivated_ids:
+            await self.session.commit()
+            
+        return deactivated_ids
+
     async def deactivate_session(self, session_id: uuid.UUID) -> Optional[UserSession]:
         db_session = await self.get_by_id(session_id)
         if db_session:
             db_session.is_active = False
-            db_session.logout_at = datetime.utcnow()
-            db_session.updated_at = datetime.utcnow()
+            db_session.logout_at = datetime.now()
+            db_session.updated_at = datetime.now()
             self.session.add(db_session)
             await self.session.commit()
             await self.session.refresh(db_session)

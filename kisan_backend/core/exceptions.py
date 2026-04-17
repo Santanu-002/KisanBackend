@@ -26,3 +26,7 @@ class RateLimitException(AppBaseException):
 class SystemException(AppBaseException):
     def __init__(self, message: str = "Internal server error"):
         super().__init__(status.HTTP_500_INTERNAL_SERVER_ERROR, message)
+
+class NotFoundException(AppBaseException):
+    def __init__(self, message: str = "Resource not found"):
+        super().__init__(status.HTTP_404_NOT_FOUND, message)

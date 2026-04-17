@@ -9,8 +9,8 @@ if TYPE_CHECKING:
     from kisan_backend.models.kyc import KYCDetails
 
 class UserRole(str, Enum):
-    FARMER = "farmer"
-    OWNER = "owner"
+    FARMER = "FARMER"
+    ADMIN = "ADMIN"
 
 class User(SQLModel, table=True):
     __tablename__ = "users"

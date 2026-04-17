@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 from kisan_backend.core.config import settings
 from kisan_backend.schemas.auth import ChannelType
+from kisan_backend.core.exceptions import AuthException
 
 logger = logging.getLogger("kisan_backend")
 
@@ -33,18 +34,29 @@ class TwilioSMSProvider(SMSProvider):
             from twilio.rest import Client
             import asyncio
             
+            client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+            params = self._prepare_params(phone_number, message, channel)
+            
             def _send():
-                client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
-                params = self._prepare_params(phone_number, message, channel)
                 return client.messages.create(**params)
             
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, _send)
             logger.info(f"Twilio: {channel.upper()} sent to {phone_number}")
             return True
+            
         except Exception as e:
-            logger.error(f"Twilio exception: {str(e)}")
-            return False
+            error_msg = str(e)
+            logger.error(f"Twilio exception: {error_msg}")
+            
+            if "not a valid phone number" in error_msg:
+                raise AuthException("The provided phone number is invalid. Please double-check and try again.")
+            elif "unverified" in error_msg.lower() or "not verified" in error_msg.lower():
+                raise AuthException("This phone number is not verified with our provider sandbox network.")
+            elif "geo permission" in error_msg.lower():
+                raise AuthException("SMS cannot be delivered to this region due to telecom restrictions.")
+            else:
+                raise AuthException("Failed to dispatch SMS due to a telecom provider error.")
 
     def _is_configured(self, channel: ChannelType) -> bool:
         """Check if required settings for the chosen channel are present."""

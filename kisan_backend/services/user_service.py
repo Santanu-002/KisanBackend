@@ -3,7 +3,7 @@ import uuid
 from typing import List, Optional, Tuple
 import aioboto3
 from botocore.config import Config
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.future import select
 from kisan_backend.core.config import settings
@@ -12,20 +12,21 @@ from kisan_backend.models.profile import Profile
 from kisan_backend.repositories.user_repository import UserRepository
 from kisan_backend.schemas.user import UserUpdate
 
+from kisan_backend.services.storage_service import StorageService
+
 class UserService:
-    def __init__(self, user_repo: UserRepository):
+    def __init__(self, user_repo: UserRepository, storage_service: StorageService):
         self.user_repo = user_repo
-        self.session = aioboto3.Session()
+        self.storage_service = storage_service
 
     async def get_user(self, user_id: str) -> Optional[User]:
-        # User repo should ideally load profile too. 
-        # For SQLModel Relationship, it might need explicit selection or lazy load.
         return await self.user_repo.get_by_id(user_id)
 
     async def update_profile(self, user_id: str, update_data: UserUpdate) -> User:
         user = await self.user_repo.get_by_id(user_id)
         if not user:
-            raise Exception("User not found")
+            from kisan_backend.core.exceptions import NotFoundException
+            raise NotFoundException("User not found")
         
         # Check if profile exists, if not create one
         profile = user.profile
@@ -45,58 +46,24 @@ class UserService:
         return user
 
     async def get_avatar_upload_url(self, user_id: str, content_type: str = "image/jpeg") -> Tuple[str, str]:
-        """Generates a presigned URL for uploading a profile picture to R2."""
+        """Generates a presigned URL for uploading a profile picture."""
         file_key = f"profile/uploads/{user_id}/avatar.jpg"
-        
-        async with self.session.client(
-            's3',
-            endpoint_url=settings.S3_ENDPOINT_URL,
-            aws_access_key_id=settings.S3_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.S3_SECRET_ACCESS_KEY,
-            config=Config(signature_version='s3v4'),
-            region_name=settings.S3_REGION
-        ) as s3:
-            url = await s3.generate_presigned_url(
-                ClientMethod='put_object',
-                Params={
-                    'Bucket': settings.S3_BUCKET_NAME,
-                    'Key': file_key,
-                    'ContentType': content_type,
-                },
-                ExpiresIn=3600  # 1 hour
-            )
-            return url, file_key
+        url = await self.storage_service.get_presigned_url(file_key, content_type)
+        return url, file_key
 
     async def get_kyc_upload_url(self, user_id: str, filename: str, content_type: str = "image/jpeg") -> Tuple[str, str]:
-        """Generates a presigned URL for uploading a KYC document to R2."""
-        # Clean the filename to ensure it's safe and consistent
+        """Generates a presigned URL for uploading a KYC document."""
         ext = os.path.splitext(filename)[1] or ".jpg"
         file_key = f"profile/kyc/{user_id}/{uuid.uuid4()}{ext}"
-        
-        async with self.session.client(
-            's3',
-            endpoint_url=settings.S3_ENDPOINT_URL,
-            aws_access_key_id=settings.S3_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.S3_SECRET_ACCESS_KEY,
-            config=Config(signature_version='s3v4'),
-            region_name=settings.S3_REGION
-        ) as s3:
-            url = await s3.generate_presigned_url(
-                ClientMethod='put_object',
-                Params={
-                    'Bucket': settings.S3_BUCKET_NAME,
-                    'Key': file_key,
-                    'ContentType': content_type,
-                },
-                ExpiresIn=3600
-            )
-            return url, file_key
+        url = await self.storage_service.get_presigned_url(file_key, content_type)
+        return url, file_key
 
     async def submit_kyc(self, user_id: str) -> User:
         """Marks the user's KYC as completed."""
         user = await self.user_repo.get_by_id(user_id)
         if not user:
-            raise Exception("User not found")
+            from kisan_backend.core.exceptions import NotFoundException
+            raise NotFoundException("User not found")
         
         user.is_kyc_completed = True
         user.updated_at = datetime.utcnow()
@@ -104,26 +71,6 @@ class UserService:
         return user
 
     async def get_predefined_avatars(self) -> List[str]:
-        """Lists available avatars from the predefined path in R2."""
+        """Lists available avatars from the predefined path."""
         prefix = "profile/avatars/"
-
-        async with self.session.client(
-            's3',
-            endpoint_url=settings.S3_ENDPOINT_URL,
-            aws_access_key_id=settings.S3_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.S3_SECRET_ACCESS_KEY,
-            region_name=settings.S3_REGION
-        ) as s3:
-            response = await s3.list_objects_v2(
-                Bucket=settings.S3_BUCKET_NAME,
-                Prefix=prefix
-            )
-            
-            avatars = []
-            if 'Contents' in response:
-                public_prefix = settings.S3_PUBLIC_URL_PREFIX or settings.S3_ENDPOINT_URL
-                for obj in response['Contents']:
-                    if obj['Key'] != prefix: # Skip the prefix directory itself
-                        avatars.append(f"{public_prefix}/{obj['Key']}")
-            
-            return avatars
+        return await self.storage_service.list_objects(prefix)

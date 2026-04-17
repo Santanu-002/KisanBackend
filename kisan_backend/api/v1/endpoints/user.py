@@ -12,11 +12,13 @@ from kisan_backend.core.responses import SuccessResponse, ApiResponse
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
+from kisan_backend.services.storage_service import storage_service
+
 async def get_user_service(
     db: Annotated[AsyncSession, Depends(get_db)]
 ) -> UserService:
     user_repo = UserRepository(db)
-    return UserService(user_repo)
+    return UserService(user_repo, storage_service)
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
