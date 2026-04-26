@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 
 from kisan_backend.core.config import settings
 from kisan_backend.core.exceptions import AppBaseException
-from kisan_backend.api.v1.endpoints import auth, user, location, kyc, admin
+from kisan_backend.api.v1.endpoints import auth, user, location, kyc, admin, admin_auth
 from kisan_backend.middleware.logging import LoggingMiddleware
 from kisan_backend.middleware.device_metadata import DeviceMetadataMiddleware
 from kisan_backend.db.session import init_db
@@ -61,6 +61,7 @@ app.include_router(user.router, prefix=settings.API_V1_STR)
 app.include_router(location.router, prefix=settings.API_V1_STR)
 app.include_router(kyc.router, prefix=settings.API_V1_STR)
 app.include_router(admin.router, prefix=settings.API_V1_STR)
+app.include_router(admin_auth.router, prefix=settings.API_V1_STR)
 
 from kisan_backend.core.messages import ResponseMessages
 
@@ -94,4 +95,4 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_config=None)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, log_config=None, reload=True)

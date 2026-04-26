@@ -4,7 +4,7 @@ from kisan_backend.core.config import settings
 
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=True, # Enable verbose SQL logging for CRUD visibility
+    echo=False, # Disabled verbose SQL logging
     future=True
 )
 

@@ -1,6 +1,7 @@
-from typing import Annotated
-from fastapi import APIRouter, Depends, status
-from kisan_backend.core.security import get_current_user
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, status, Form, File, UploadFile
+from kisan_backend.api.v1.dependencies.auth_deps import get_current_user, PermissionChecker
+from kisan_backend.core.permissions import Permission
 from kisan_backend.models.user import User
 from kisan_backend.schemas.user import UserResponse, UserUpdate, AvatarUploadUrlResponse, PredefinedAvatarResponse
 from kisan_backend.services.user_service import UserService
@@ -21,11 +22,10 @@ async def get_user_service(
     return UserService(user_repo, storage_service)
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
-CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
 @router.get("/me", response_model=ApiResponse[UserResponse])
 async def get_my_profile(
-    current_user: CurrentUserDep
+    current_user: Annotated[User, Depends(PermissionChecker(Permission.PROFILE_VIEW))]
 ):
     return SuccessResponse(
         message=ResponseMessages.PROFILE_FETCHED,
@@ -34,34 +34,58 @@ async def get_my_profile(
 
 @router.patch("/me", response_model=ApiResponse[UserResponse])
 async def update_my_profile(
-    update_data: UserUpdate,
-    current_user: CurrentUserDep,
-    user_service: UserServiceDep
+    current_user: Annotated[User, Depends(PermissionChecker(Permission.PROFILE_EDIT))],
+    user_service: UserServiceDep,
+    full_name: Annotated[Optional[str], Form()] = None,
+    email: Annotated[Optional[str], Form()] = None,
+    gender: Annotated[Optional[str], Form()] = None,
+    avatar_url: Annotated[Optional[str], Form()] = None,
+    avatar_file: Annotated[Optional[UploadFile], File()] = None,
 ):
-    user = await user_service.update_profile(str(current_user.id), update_data)
+    update_data = UserUpdate(
+        full_name=full_name,
+        email=email,
+        gender=gender,
+        avatar_url=avatar_url
+    )
+    user = await user_service.update_profile(
+        str(current_user.id), 
+        update_data, 
+        avatar_file=avatar_file
+    )
     return SuccessResponse(
         message=ResponseMessages.PROFILE_UPDATED,
         data=UserResponse.from_user(user)
     )
 
-@router.get("/avatar-upload-url", response_model=ApiResponse[AvatarUploadUrlResponse])
-async def get_avatar_upload_url(
-    current_user: CurrentUserDep,
+
+@router.post("/profile", response_model=ApiResponse[UserResponse])
+async def create_profile(
+    current_user: Annotated[User, Depends(PermissionChecker(Permission.PROFILE_EDIT))],
     user_service: UserServiceDep,
-    content_type: str = "image/jpeg"
+    full_name: Annotated[str, Form()],
+    email: Annotated[Optional[str], Form()] = None,
+    gender: Annotated[Optional[str], Form()] = None,
+    avatar_url: Annotated[Optional[str], Form()] = None,
+    avatar_file: Annotated[Optional[UploadFile], File()] = None,
 ):
-    url, file_key = await user_service.get_avatar_upload_url(str(current_user.id), content_type)
-    return SuccessResponse(
-        message=ResponseMessages.UPLOAD_URL_GENERATED,
-        data={
-            "upload_url": url,
-            "file_key": file_key
-        }
+    user = await user_service.create_profile(
+        user_id=str(current_user.id),
+        full_name=full_name,
+        email=email,
+        gender=gender,
+        avatar_url=avatar_url,
+        avatar_file=avatar_file
     )
+    return SuccessResponse(
+        message=ResponseMessages.PROFILE_CREATED,
+        data=UserResponse.from_user(user)
+    )
+
 
 @router.get("/kyc-upload-url", response_model=ApiResponse[AvatarUploadUrlResponse])
 async def get_kyc_upload_url(
-    current_user: CurrentUserDep,
+    current_user: Annotated[User, Depends(PermissionChecker(Permission.PROFILE_EDIT))],
     user_service: UserServiceDep,
     filename: str,
     content_type: str = "image/jpeg"
@@ -77,7 +101,7 @@ async def get_kyc_upload_url(
 
 @router.post("/submit-kyc", response_model=ApiResponse[UserResponse])
 async def submit_kyc(
-    current_user: CurrentUserDep,
+    current_user: Annotated[User, Depends(PermissionChecker(Permission.PROFILE_EDIT))],
     user_service: UserServiceDep,
 ):
     user = await user_service.submit_kyc(str(current_user.id))
@@ -88,6 +112,7 @@ async def submit_kyc(
 
 @router.get("/predefined-avatars", response_model=ApiResponse[PredefinedAvatarResponse])
 async def get_predefined_avatars(
+    current_user: Annotated[User, Depends(PermissionChecker(Permission.PROFILE_VIEW))],
     user_service: UserServiceDep
 ):
     avatars = await user_service.get_predefined_avatars()

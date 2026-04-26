@@ -19,10 +19,10 @@ from loguru import logger
 from kisan_backend.core.responses import SuccessResponse, ApiResponse
 from kisan_backend.core.messages import ResponseMessages
 from kisan_backend.core.constants import SessionConfig
-from kisan_backend.models.user import UserRole
-from kisan_backend.schemas.auth import VerifyOTPRequest, SendOTPRequest, RefreshTokenRequest, DeviceMetadata
+from kisan_backend.models.user import UserRole, User
+from kisan_backend.schemas.auth import VerifyOTPRequest, SendOTPRequest, RefreshTokenRequest, DeviceMetadata, UpdateFCMTokenRequest
 from kisan_backend.core.ws_manager import manager
-from kisan_backend.api.v1.dependencies.auth_deps import AuthServiceDep, get_device_meta, is_browser_request
+from kisan_backend.api.v1.dependencies.auth_deps import AuthServiceDep, get_device_meta, is_browser_request, get_current_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -33,12 +33,21 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/send-otp")
 async def send_otp(
-    request: SendOTPRequest,
+    request: Request,
+    send_req: SendOTPRequest,
     auth_service: AuthServiceDep,
 ):
-    otp_response = await auth_service.send_otp(request.phone_number, channel=request.channel)
+    if is_browser_request(request):
+        logger.warning("[AUTH] OTP send blocked: Browser requests not allowed on mobile endpoint.")
+        return ApiResponse(
+            success=False,
+            message=ResponseMessages.ACCESS_DENIED_ADMIN_ONLY,
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
 
-    channel_name = request.channel.value.upper() if hasattr(request.channel, "value") else str(request.channel).upper()
+    otp_response = await auth_service.send_otp(send_req.phone_number, channel=send_req.channel)
+
+    channel_name = send_req.channel.value.upper() if hasattr(send_req.channel, "value") else str(send_req.channel).upper()
 
     return SuccessResponse(
         message=ResponseMessages.OTP_SENT.format(channel=channel_name),
@@ -58,25 +67,24 @@ async def verify_otp(
         verify_req.phone_number,
         verify_req.otp,
         clear_state=verify_req.force,
+        auto_create=True,
     )
 
     device_meta = get_device_meta(request)
     from_browser = is_browser_request(request)
 
     # ── Access Control ──────────────────────────────────────────────────────
-    # Rule: browser clients (Admin Web) → admins only.
-    #       native mobile clients (Flutter app) → admins + farmers.
-    if from_browser and user.role != UserRole.ADMIN:
-        logger.warning(
-            f"[AUTH] Browser login blocked for non-admin user {user.id} (role={user.role})"
-        )
+    # This endpoint is strictly for Native Mobile Apps (Flutter).
+    # Browser requests must use the /admin/auth endpoints.
+    if from_browser:
+        logger.warning(f"[AUTH] Browser login attempted on mobile endpoint by user {user.id}")
         return ApiResponse(
             success=False,
-            message=ResponseMessages.ACCESS_DENIED_BROWSER_FARMERS,
+            message=ResponseMessages.ACCESS_DENIED_ADMIN_ONLY,
             status_code=status.HTTP_403_FORBIDDEN,
         )
 
-    if not from_browser and user.role not in (UserRole.ADMIN, UserRole.FARMER):
+    if user.role not in (UserRole.ADMIN, UserRole.FARMER):
         logger.warning(
             f"[AUTH] Mobile login blocked for unsupported role: {user.role} (user {user.id})"
         )
@@ -207,6 +215,21 @@ async def logout(
         logger.error(f"[AUTH] Logout invalidation failed: {e}")
         # Token already expired / session dead — still clear client-side state
         return SuccessResponse(message="Session already terminated or token expired", data={"handshake": True})
+
+
+@router.post("/fcm-token")
+async def update_fcm_token(
+    request: Request,
+    request_data: UpdateFCMTokenRequest,
+    auth_service: AuthServiceDep,
+    user: User = Depends(get_current_user),
+):
+    """Update user's FCM token."""
+    device_meta = get_device_meta(request)
+    device_id = device_meta.device_id
+
+    await auth_service.update_fcm_token(user.id, device_id, request_data.fcm_token)
+    return SuccessResponse(message="FCM token updated successfully")
 
 
 # ---------------------------------------------------------------------------

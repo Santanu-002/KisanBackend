@@ -29,7 +29,7 @@ class UserSession(SQLModel, table=True):
     logout_at: Optional[datetime] = Field(default=None)
 
     # Relationships
-    user: Optional["User"] = Relationship()
+    user: Optional["User"] = Relationship(back_populates="sessions")
 
     class Config:
         arbitrary_types_allowed = True

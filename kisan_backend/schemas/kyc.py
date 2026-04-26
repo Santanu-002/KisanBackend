@@ -6,11 +6,10 @@ from kisan_backend.models.kyc import KYCStatus
 
 class KYCBase(BaseModel):
     document_type: str
-    id_number: Optional[str] = None
-    latitude: float
-    longitude: float
-    address_line1: str
-    address_line2: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    district: str
+    landmark: Optional[str] = None
     city: str
     state: str
     pincode: str

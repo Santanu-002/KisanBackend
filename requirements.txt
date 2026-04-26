@@ -10,6 +10,7 @@ redis
 httpx
 loguru
 python-multipart
+firebase-admin
 twilio
 aioboto3
 email-validator

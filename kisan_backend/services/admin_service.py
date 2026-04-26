@@ -64,6 +64,14 @@ class AdminService:
         await self.admin_repo.session.refresh(kyc)
         await self.admin_repo.session.refresh(user)
         
+        # Send notification
+        from kisan_backend.services.notification_service import notification_service
+        await notification_service.send_kyc_status_notification(
+            user=user,
+            approved=approved,
+            remarks=remarks
+        )
+        
         return kyc
 
     async def bulk_verify_kyc(

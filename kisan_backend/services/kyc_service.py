@@ -14,16 +14,15 @@ class KYCService:
         self,
         user_id: uuid.UUID,
         document_type: str,
-        address_line1: str,
+        district: str,
         city: str,
         state: str,
         pincode: str,
-        latitude: float,
-        longitude: float,
         front_image: UploadFile,
         back_image: UploadFile,
-        id_number: str = None,
-        address_line2: str = None,
+        landmark: str = None,
+        latitude: float = None,
+        longitude: float = None,
     ) -> KYCDetails:
         """
         Coordinates the KYC submission:
@@ -53,13 +52,12 @@ class KYCService:
                 # For this implementation, we overwrite fields
                 kyc_record = existing_kyc
                 kyc_record.document_type = document_type
-                kyc_record.id_number = id_number
                 kyc_record.front_image_url = front_url
                 kyc_record.back_image_url = back_url
                 kyc_record.latitude = latitude
                 kyc_record.longitude = longitude
-                kyc_record.address_line1 = address_line1
-                kyc_record.address_line2 = address_line2
+                kyc_record.district = district
+                kyc_record.landmark = landmark
                 kyc_record.city = city
                 kyc_record.state = state
                 kyc_record.pincode = pincode
@@ -70,13 +68,12 @@ class KYCService:
                 kyc_record = KYCDetails(
                     user_id=user_id,
                     document_type=document_type,
-                    id_number=id_number,
                     front_image_url=front_url,
                     back_image_url=back_url,
                     latitude=latitude,
                     longitude=longitude,
-                    address_line1=address_line1,
-                    address_line2=address_line2,
+                    district=district,
+                    landmark=landmark,
                     city=city,
                     state=state,
                     pincode=pincode,

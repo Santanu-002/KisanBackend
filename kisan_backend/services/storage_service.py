@@ -42,6 +42,50 @@ class StorageService:
             logger.error(f"Error generating presigned URL: {str(e)}")
             raise e
 
+    async def get_view_url(self, file_key: str, expires_in: int = 3600) -> str:
+        """
+        Generates a presigned URL for viewing a private file.
+        Extracts the key if a full URL is provided.
+        """
+        if not file_key:
+            return ""
+
+        # If it's a full URL, extract the relative key
+        if self.public_url_prefix and file_key.startswith(self.public_url_prefix):
+            file_key = file_key.replace(self.public_url_prefix, "").lstrip("/")
+        elif self.endpoint_url and file_key.startswith(self.endpoint_url):
+            # Also handle if it's prefixed with the endpoint URL
+            file_key = file_key.replace(self.endpoint_url, "").lstrip("/")
+            # If the bucket name is also in there (path style)
+            if file_key.startswith(self.bucket_name):
+                file_key = file_key.replace(self.bucket_name, "", 1).lstrip("/")
+        elif "://" in file_key:
+            # Fallback: take everything after the host
+            parts = file_key.split("/")
+            if len(parts) > 3:
+                file_key = "/".join(parts[3:])
+
+        try:
+            async with self.session.client(
+                "s3",
+                region_name=self.region,
+                endpoint_url=self.endpoint_url,
+                aws_access_key_id=self.access_key,
+                aws_secret_access_key=self.secret_key,
+                config=Config(signature_version="s3v4"),
+            ) as s3:
+                return await s3.generate_presigned_url(
+                    ClientMethod='get_object',
+                    Params={
+                        'Bucket': self.bucket_name,
+                        'Key': file_key,
+                    },
+                    ExpiresIn=expires_in
+                )
+        except Exception as e:
+            logger.error(f"Error generating view URL: {str(e)}")
+            return file_key  # Return original as fallback
+
     async def upload_file(self, file: UploadFile, folder: str, filename: str) -> str:
         """
         Uploads a file stream directly to S3/R2 and returns the public URL.

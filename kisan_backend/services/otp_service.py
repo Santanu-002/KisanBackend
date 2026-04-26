@@ -45,8 +45,9 @@ class OTPService:
             raise RateLimitException(ResponseMessages.MAX_RETRIES_REACHED)
 
         # Generate OTP
-        is_mock = settings.SMS_PROVIDER.lower() == "mock"
-        otp = OTPConfig.MOCK_CODE if is_mock else str(random.randint(100000, 999999))
+        # Force static OTP for development as requested
+        otp = OTPConfig.MOCK_CODE
+        logger.info(f"[OTP] Generated static OTP {otp} for {phone_number}")
         hashed_otp = self._hash_otp(otp)
 
         # Store in Redis
@@ -61,7 +62,7 @@ class OTPService:
         next_wait = OTPConfig.BACKOFF_MAP.get(new_attempts, OTPConfig.BLOCK_DURATION_SECONDS)
 
         # Send via provider
-        if not is_mock:
+        if settings.SMS_PROVIDER != "mock":
             prefix = "<#> "
             message = f"{prefix}Your Kisan app login OTP is {otp}."
             if settings.ANDROID_APP_HASH and channel == ChannelType.SMS:

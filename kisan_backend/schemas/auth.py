@@ -6,7 +6,11 @@ class ChannelType(str, Enum):
     WHATSAPP = "whatsapp"
 
 class SendOTPRequest(BaseModel):
-    phone_number: str = Field(..., pattern=r"^\+91 ?(?:1111111111|2222222222|[6-9]\d{9})$", description="Indian phone number starting with +91")
+    phone_number: str = Field(
+        ..., 
+        description="Indian phone number starting with +91",
+        pattern=r"^\+91\d{10}$"
+    )
     channel: ChannelType = Field(default=ChannelType.SMS)
 
 class SendOTPResponse(BaseModel):
@@ -15,12 +19,14 @@ class SendOTPResponse(BaseModel):
     resend_accepts_at: str
 
 class VerifyOTPRequest(BaseModel):
-    phone_number: str = Field(..., pattern=r"^\+91 ?(?:1111111111|2222222222|[6-9]\d{9})$")
+    phone_number: str = Field(..., pattern=r"^\+91\d{10}$")
     otp: str = Field(..., min_length=4, max_length=6)
     force: bool = Field(default=False)
 
 class TokenResponse(BaseModel):
     user_id: str
+    role: str
+    permissions: list[str]
     access_token: str
     refresh_token: str
     access_token_expire_at: str
@@ -41,3 +47,6 @@ class DeviceMetadata(BaseModel):
     os_version: str = "unknown"
     app_version: str = "unknown"
     ip_address: str | None = None
+
+class UpdateFCMTokenRequest(BaseModel):
+    fcm_token: str

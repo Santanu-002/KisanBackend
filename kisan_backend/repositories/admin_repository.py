@@ -35,7 +35,7 @@ class AdminRepository:
         role: Optional[UserRole] = None
     ) -> Tuple[List[User], int]:
         """Fetches a paginated list of users with search and filter."""
-        query = select(User).options(selectinload(User.profile), selectinload(User.kyc_details))
+        query = select(User).options(selectinload(User.profile), selectinload(User.kyc_details), selectinload(User.sessions))
         
         if search:
             query = query.where(User.phone_number.contains(search))

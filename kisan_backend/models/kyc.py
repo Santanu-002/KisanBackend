@@ -19,16 +19,15 @@ class KYCDetails(SQLModel, table=True):
     user_id: uuid.UUID = Field(foreign_key="users.id", index=True, unique=True)
     
     document_type: str = Field(sa_column=Column(String, nullable=False))
-    id_number: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
     
     front_image_url: str = Field(sa_column=Column(String, nullable=False))
     back_image_url: str = Field(sa_column=Column(String, nullable=False))
     
-    latitude: float = Field(sa_column=Column(Float, nullable=False))
-    longitude: float = Field(sa_column=Column(Float, nullable=False))
+    latitude: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    longitude: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
     
-    address_line1: str = Field(sa_column=Column(String, nullable=False))
-    address_line2: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
+    district: str = Field(sa_column=Column(String, nullable=False))
+    landmark: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
     city: str = Field(sa_column=Column(String, nullable=False))
     state: str = Field(sa_column=Column(String, nullable=False))
     pincode: str = Field(sa_column=Column(String, nullable=False))

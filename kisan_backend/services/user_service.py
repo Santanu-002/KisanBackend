@@ -13,6 +13,7 @@ from kisan_backend.repositories.user_repository import UserRepository
 from kisan_backend.schemas.user import UserUpdate
 
 from kisan_backend.services.storage_service import StorageService
+from fastapi import UploadFile
 
 class UserService:
     def __init__(self, user_repo: UserRepository, storage_service: StorageService):
@@ -22,7 +23,7 @@ class UserService:
     async def get_user(self, user_id: str) -> Optional[User]:
         return await self.user_repo.get_by_id(user_id)
 
-    async def update_profile(self, user_id: str, update_data: UserUpdate) -> User:
+    async def update_profile(self, user_id: str, update_data: UserUpdate, avatar_file: Optional[UploadFile] = None) -> User:
         user = await self.user_repo.get_by_id(user_id)
         if not user:
             from kisan_backend.core.exceptions import NotFoundException
@@ -39,7 +40,59 @@ class UserService:
         for key, value in data.items():
             if hasattr(profile, key):
                 setattr(profile, key, value)
+
+        # Handle avatar file upload if provided
+        if avatar_file:
+            timestamp = int(datetime.utcnow().timestamp())
+            avatar_url = await self.storage_service.upload_file(
+                avatar_file,
+                folder=f"profile/uploads/{user_id}",
+                filename=f"avatar_{timestamp}.jpg"
+            )
+            profile.avatar_url = avatar_url
         
+        profile.updated_at = datetime.utcnow()
+        await self.user_repo.session.flush()
+        await self.user_repo.session.refresh(user, ["profile"])
+        return user
+
+    async def create_profile(
+        self, 
+        user_id: str, 
+        full_name: str, 
+        email: Optional[str] = None, 
+        gender: Optional[str] = None, 
+        avatar_url: Optional[str] = None,
+        avatar_file: Optional[UploadFile] = None
+    ) -> User:
+        user = await self.user_repo.get_by_id(user_id)
+        if not user:
+            from kisan_backend.core.exceptions import NotFoundException
+            raise NotFoundException("User not found")
+            
+        profile = user.profile
+        if not profile:
+            profile = Profile(user_id=user.id)
+            self.user_repo.session.add(profile)
+            
+        profile.full_name = full_name
+        if email is not None:
+            profile.email = email
+        if gender is not None:
+            profile.gender = gender
+
+        # If a file is uploaded, it takes precedence over avatar_url (predefined)
+        if avatar_file:
+            timestamp = int(datetime.utcnow().timestamp())
+            avatar_url = await self.storage_service.upload_file(
+                avatar_file,
+                folder=f"profile/uploads/{user_id}",
+                filename=f"avatar_{timestamp}.jpg"
+            )
+            profile.avatar_url = avatar_url
+        elif avatar_url is not None:
+            profile.avatar_url = avatar_url
+            
         profile.updated_at = datetime.utcnow()
         await self.user_repo.session.flush()
         await self.user_repo.session.refresh(user, ["profile"])

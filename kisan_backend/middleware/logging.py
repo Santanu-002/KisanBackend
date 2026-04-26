@@ -20,26 +20,6 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         elif "/kyc" in path: flag = "[KYC]"
         elif "/plots" in path: flag = "[PLOT]"
 
-        # Log Request Metadata and Body
-        body_log = ""
-        if request.method in ["POST", "PUT", "PATCH"]:
-            try:
-                body = await request.body()
-                if body:
-                    # Provide original body to the next handler by wrapping the request
-                    # Note: We must re-send the body in a way it can be re-read
-                    # For BaseHTTPMiddleware, we can't easily re-read, so we use simpler logging:
-                    body_json = json.loads(body.decode())
-                    body_log = f"\n📦 PAYLOAD: {json.dumps(body_json, indent=2)}"
-                    
-                    # Workaround to allow endpoint to read body again
-                    async def receive():
-                        return {"type": "http.request", "body": body, "more_body": False}
-                    request._receive = receive
-            except Exception:
-                body_log = "\n📦 PAYLOAD: <binary or unparseable>"
-
-        logger.info(f"🚀 {flag} {request.method} {path} {body_log} [{request_id}]")
 
         start_time = time.time()
         try:

@@ -3,17 +3,21 @@ from typing import Annotated, List, Optional
 from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kisan_backend.core.security import get_current_admin
+from kisan_backend.api.v1.dependencies.auth_deps import PermissionChecker
+from kisan_backend.core.permissions import Permission
 from kisan_backend.models.user import User, UserRole
 from kisan_backend.schemas.admin import (
     AdminDashboardStats, 
     KYCVerifyRequest, 
     BulkKYCVerifyRequest,
-    AdminUserListResponse
+    AdminUserListResponse,
+    AdminFarmerResponse
 )
 from kisan_backend.schemas.user import UserResponse
 from kisan_backend.schemas.kyc import KYCSubmissionResponse
+from kisan_backend.schemas.auth import DeviceMetadata
 from kisan_backend.services.admin_service import AdminService
+from kisan_backend.services.storage_service import storage_service
 from kisan_backend.repositories.admin_repository import AdminRepository
 from kisan_backend.repositories.user_repository import UserRepository
 from kisan_backend.repositories.kyc_repository import KYCRepository
@@ -31,11 +35,9 @@ async def get_admin_service(
     return AdminService(admin_repo, user_repo, kyc_repo)
 
 AdminServiceDep = Annotated[AdminService, Depends(get_admin_service)]
-AdminUserDep = Annotated[User, Depends(get_current_admin)]
-
 @router.get("/stats", response_model=ApiResponse[AdminDashboardStats])
 async def get_stats(
-    admin_user: AdminUserDep,
+    admin_user: Annotated[User, Depends(PermissionChecker(Permission.STATS_VIEW))],
     admin_service: AdminServiceDep
 ):
     """Fetches high-level metrics for the dashboard overview."""
@@ -44,7 +46,7 @@ async def get_stats(
 
 @router.get("/users", response_model=ApiResponse[AdminUserListResponse])
 async def list_users(
-    admin_user: AdminUserDep,
+    admin_user: Annotated[User, Depends(PermissionChecker(Permission.USERS_VIEW))],
     admin_service: AdminServiceDep,
     page: int = 1,
     size: int = 20,
@@ -57,10 +59,37 @@ async def list_users(
         search=search, 
         role=UserRole.FARMER
     )
+    mapped_users = []
+    for u in users:
+        is_new = u.profile is None
+        sessions = getattr(u, "sessions", [])
+        last_login_at = max([s.last_login_at for s in sessions if s.last_login_at]) if sessions and any(s.last_login_at for s in sessions) else None
+        active_sessions = [
+            DeviceMetadata(
+                device_id=s.device_id,
+                brand=s.brand,
+                model=s.model,
+                os_name=s.os_name,
+                os_version=s.os_version,
+                app_version=s.app_version,
+                ip_address=s.ip_address
+            )
+            for s in sessions if s.is_active
+        ]
+        
+        user_resp = UserResponse.from_user(u)
+        admin_resp = AdminFarmerResponse(
+            **user_resp.model_dump(),
+            is_new=is_new,
+            last_login_at=last_login_at,
+            active_sessions=active_sessions
+        )
+        mapped_users.append(admin_resp)
+
     return SuccessResponse(
         message="Users fetched",
         data={
-            "users": [UserResponse.from_user(u) for u in users],
+            "users": mapped_users,
             "total": total,
             "page": page,
             "size": size
@@ -69,7 +98,7 @@ async def list_users(
 
 @router.get("/kyc/pending", response_model=ApiResponse[List[KYCSubmissionResponse]])
 async def list_pending_kyc(
-    admin_user: AdminUserDep,
+    admin_user: Annotated[User, Depends(PermissionChecker(Permission.KYC_VIEW))],
     admin_service: AdminServiceDep
 ):
     """Lists all users awaiting KYC verification."""
@@ -82,6 +111,11 @@ async def list_pending_kyc(
         # Populate enriched fields from joined relationships
         resp.full_name = k.user.profile.full_name if k.user and k.user.profile else "N/A"
         resp.phone_number = k.user.phone_number if k.user else "N/A"
+        
+        # FIX: Generate presigned URLs for private storage
+        resp.front_image_url = await storage_service.get_view_url(k.front_image_url)
+        resp.back_image_url = await storage_service.get_view_url(k.back_image_url)
+        
         data.append(resp)
         
     return SuccessResponse(
@@ -92,7 +126,7 @@ async def list_pending_kyc(
 @router.post("/kyc/bulk-verify", response_model=ApiResponse[List[KYCSubmissionResponse]])
 async def bulk_verify_kyc(
     verify_data: BulkKYCVerifyRequest,
-    admin_user: AdminUserDep,
+    admin_user: Annotated[User, Depends(PermissionChecker(Permission.KYC_APPROVE))],
     admin_service: AdminServiceDep
 ):
     """Approve or Reject multiple KYC submissions in one go."""
@@ -101,16 +135,24 @@ async def bulk_verify_kyc(
         approved=verify_data.approved,
         remarks=verify_data.remarks
     )
+    # Fix image URLs in bulk results
+    data = []
+    for r in results:
+        resp = KYCSubmissionResponse.model_validate(r)
+        resp.front_image_url = await storage_service.get_view_url(r.front_image_url)
+        resp.back_image_url = await storage_service.get_view_url(r.back_image_url)
+        data.append(resp)
+
     return SuccessResponse(
         message=f"Processed {len(results)} KYC requests",
-        data=[KYCSubmissionResponse.model_validate(r) for r in results]
+        data=data
     )
 
 @router.post("/kyc/{user_id}/verify", response_model=ApiResponse[KYCSubmissionResponse])
 async def verify_kyc(
     user_id: uuid.UUID,
     verify_data: KYCVerifyRequest,
-    admin_user: AdminUserDep,
+    admin_user: Annotated[User, Depends(PermissionChecker(Permission.KYC_APPROVE))],
     admin_service: AdminServiceDep
 ):
     """Approve or Reject a user's KYC submission."""
@@ -120,9 +162,13 @@ async def verify_kyc(
             approved=verify_data.approved,
             remarks=verify_data.remarks
         )
+        resp = KYCSubmissionResponse.model_validate(kyc)
+        resp.front_image_url = await storage_service.get_view_url(kyc.front_image_url)
+        resp.back_image_url = await storage_service.get_view_url(kyc.back_image_url)
+
         return SuccessResponse(
             message="KYC status updated successfully",
-            data=KYCSubmissionResponse.model_validate(kyc)
+            data=resp
         )
     except ValueError as e:
         from kisan_backend.core.exceptions import NotFoundException

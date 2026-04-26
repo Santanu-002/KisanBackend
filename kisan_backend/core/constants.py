@@ -10,7 +10,7 @@ class OTPConfig:
     """OTP generation, storage, and rate-limiting parameters."""
 
     LENGTH = 6
-    MOCK_CODE = "222222"
+    MOCK_CODE = "000000"
     MAX_ATTEMPTS_DEFAULT = 5  # Overridden by settings.OTP_MAX_ATTEMPTS if set
 
     # Backoff wait times (in seconds) between resend attempts

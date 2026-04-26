@@ -35,12 +35,16 @@ class UserResponse(BaseModel):
     gender: Optional[str] = None
     avatar_url: Optional[str] = None
     
+    # Granular permissions
+    permissions: list[str] = []
+    
     class Config:
         from_attributes = True
 
     @classmethod
     def from_user(cls, user: Any) -> "UserResponse":
         """Explicitly create a UserResponse from a User model and its Profile."""
+        from kisan_backend.core.permissions import get_role_permissions
         profile = getattr(user, "profile", None)
         return cls(
             id=user.id,
@@ -56,6 +60,7 @@ class UserResponse(BaseModel):
             email=profile.email if profile else None,
             gender=profile.gender if profile else None,
             avatar_url=profile.avatar_url if profile else None,
+            permissions=[p.value for p in get_role_permissions(user.role)]
         )
 
 class AvatarUploadUrlResponse(BaseModel):

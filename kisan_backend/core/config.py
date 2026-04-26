@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     S3_REGION: str = "auto"
     S3_PUBLIC_URL_PREFIX: Optional[str] = None
     
+    # Firebase
+    FIREBASE_SERVICE_ACCOUNT_PATH: Optional[str] = None
+    
     model_config = SettingsConfigDict(
         env_file=".env", 
         case_sensitive=True,

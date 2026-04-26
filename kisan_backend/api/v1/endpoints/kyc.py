@@ -1,7 +1,8 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, Form, File, UploadFile, status
 from loguru import logger
-from kisan_backend.core.security import get_current_user
+from kisan_backend.api.v1.dependencies.auth_deps import get_current_user, PermissionChecker
+from kisan_backend.core.permissions import Permission
 from kisan_backend.models.user import User
 from kisan_backend.schemas.kyc import KYCSubmissionResponse
 from kisan_backend.services.kyc_service import KYCService
@@ -19,23 +20,21 @@ async def get_kyc_service(
     return KYCService(kyc_repo)
 
 KYCServiceDep = Annotated[KYCService, Depends(get_kyc_service)]
-CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
 @router.post("/submit", response_model=ApiResponse[KYCSubmissionResponse])
 async def submit_kyc(
-    current_user: CurrentUserDep,
+    current_user: Annotated[User, Depends(PermissionChecker(Permission.PROFILE_EDIT))],
     kyc_service: KYCServiceDep,
     document_type: str = Form(...),
-    latitude: float = Form(...),
-    longitude: float = Form(...),
-    address_line1: str = Form(...),
+    district: str = Form(...),
     city: str = Form(...),
     state: str = Form(...),
     pincode: str = Form(...),
     front_image: UploadFile = File(...),
     back_image: UploadFile = File(...),
-    id_number: str = Form(None),
-    address_line2: str = Form(None),
+    landmark: str = Form(None),
+    latitude: float = Form(None),
+    longitude: float = Form(None),
 ):
     """
     Submits KYC details including document photos.
@@ -45,14 +44,13 @@ async def submit_kyc(
         kyc = await kyc_service.submit_kyc(
             user_id=current_user.id,
             document_type=document_type,
-            id_number=id_number,
-            latitude=latitude,
-            longitude=longitude,
-            address_line1=address_line1,
-            address_line2=address_line2,
+            district=district,
+            landmark=landmark,
             city=city,
             state=state,
             pincode=pincode,
+            latitude=latitude,
+            longitude=longitude,
             front_image=front_image,
             back_image=back_image,
         )
